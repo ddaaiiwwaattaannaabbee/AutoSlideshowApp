@@ -1,6 +1,7 @@
 package jp.techacademy.watanabe.dai.autoslideshowapp;
 
 import android.Manifest;
+import android.app.Activity;
 import android.content.ContentResolver;
 import android.content.ContentUris;
 import android.content.pm.PackageManager;
@@ -9,17 +10,19 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Handler;
 import android.provider.MediaStore;
+import android.support.annotation.NonNull;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.ImageView;
+import android.widget.Toast;
 
 import java.util.Timer;
 import java.util.TimerTask;
 
-public class MainActivity extends AppCompatActivity implements View.OnClickListener {
+public class MainActivity extends Activity implements View.OnClickListener {
 
     private static final int PERMISSIONS_REQUEST_CODE = 100;
 
@@ -32,6 +35,8 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     private Button back;
     private Button auto;
     private Button next;
+
+    Cursor mCursor;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -47,8 +52,6 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         next = findViewById(R.id.next);
         next.setOnClickListener(this);
 
-        fieldIndex = getFieldIndex();
-
         hasPush = true;
 
         // Android 6.0以降の場合
@@ -56,23 +59,30 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             // パーミッションの許可状態を確認する
             if (checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED) {
                 // 許可されている
-                getContentsInfo(fieldIndex);
+                getCursor();
+                getContentsInfo();
             } else {
                 // 許可されていないので許可ダイアログを表示する
                 requestPermissions(new String[]{Manifest.permission.READ_EXTERNAL_STORAGE}, PERMISSIONS_REQUEST_CODE);
             }
             // Android 5系以下の場合
         } else {
-            getContentsInfo(fieldIndex);
+            getCursor();
+            getContentsInfo();
         }
     }
 
     @Override
-    public void onRequestPermissionsResult(int requestCode, String permissions[], int[] grantResults) {
+    public void onRequestPermissionsResult(int requestCode, @NonNull String permissions[], @NonNull int[] grantResults) {
         switch (requestCode) {
             case PERMISSIONS_REQUEST_CODE:
                 if (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                    getContentsInfo(fieldIndex);
+                    getCursor();
+                    getContentsInfo();
+                }else{
+                    Toast toast = Toast.makeText(MainActivity.this, "権限がないため操作できません", Toast.LENGTH_LONG);
+                    toast.show();
+                    canNotButton();
                 }
                 break;
             default:
@@ -80,25 +90,18 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         }
     }
 
-    private void getContentsInfo(int fieldIndex) {
+    private void getContentsInfo() {
 
-        Cursor cursor = getCursor();
-
-        if (cursor.moveToFirst()) {
-            showImage(cursor);
+        if (mCursor.moveToFirst()) {
+            showImage();
         }
 
-        cursor.close();
     }
 
-    private int getFieldIndex() {
-        return fieldIndex = getCursor().getColumnIndex(MediaStore.Images.Media._ID);
-    }
-
-    private Cursor getCursor() {
+    private void getCursor() {
         // 画像の情報を取得する
         ContentResolver resolver = getContentResolver();
-        return resolver.query(
+        mCursor = resolver.query(
                 MediaStore.Images.Media.EXTERNAL_CONTENT_URI, // データの種類
                 null, // 項目(null = 全項目)
                 null, // フィルタ条件(null = フィルタなし)
@@ -107,45 +110,34 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         );
     }
 
-    private void showImage(Cursor cursor) {
-        int fieldIndex = cursor.getColumnIndex(MediaStore.Images.Media._ID);
-        Long id = cursor.getLong(fieldIndex);
+    private void showImage() {
+        int fieldIndex = mCursor.getColumnIndex(MediaStore.Images.Media._ID);
+        Long id = mCursor.getLong(fieldIndex);
         Uri imageUri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id);
 
-        ImageView imageVIew = (ImageView) findViewById(R.id.imageView);
+        ImageView imageVIew = findViewById(R.id.imageView);
         imageVIew.setImageURI(imageUri);
     }
 
     private void getContentsNext() {
 
-        Cursor cursor = getCursor();
-        cursor.moveToPosition(this.fieldIndex);
-
-        if (cursor.moveToNext()) {
-            showImage(cursor);
+        if (mCursor.moveToNext()) {
+            showImage();
         } else {
-            cursor.moveToFirst();
-            showImage(cursor);
+            mCursor.moveToFirst();
+            showImage();
         }
-
-        this.fieldIndex = cursor.getPosition();
-        cursor.close();
     }
 
     private void getContentsBack() {
 
-        Cursor cursor = getCursor();
-        cursor.moveToPosition(this.fieldIndex);
-
-        if (cursor.moveToPrevious()) {
-            showImage(cursor);
+        if (mCursor.moveToPrevious()) {
+            showImage();
         } else {
-            cursor.moveToLast();
-            showImage(cursor);
+            mCursor.moveToLast();
+            showImage();
         }
 
-        this.fieldIndex = cursor.getPosition();
-        cursor.close();
     }
 
     private void changeButton() {
@@ -159,6 +151,14 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         } else {
             auto.setText("停止");
         }
+    }
+
+    private void canNotButton() {
+
+        back.setEnabled(false);
+        auto.setEnabled(false);
+        next.setEnabled(false);
+
     }
 
     private void autoRun() {
@@ -207,5 +207,12 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 Log.d("fieldIndex", String.valueOf(this.fieldIndex));
                 break;
         }
+    }
+
+    @Override
+    public void onDestroy(){
+        super.onDestroy();
+        mCursor.close();
+        Log.v("LifeCycle", "onDestroy");
     }
 }
